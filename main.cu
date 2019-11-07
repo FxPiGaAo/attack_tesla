@@ -122,7 +122,7 @@ int main(void){/*
      for(int i = 0; i < array_size; i++){
          int t = i + stride;
          if(t >= array_size) t %= stride;
-         host_array[i] = *((long long unsigned*)(&device_array)) + 4*t;//converse the device from int* to int; 4 is the byte size of an int type
+         host_array[i] = *((long long unsigned*)(&device_array)) + sizeof(long long unsigned)*t;//converse the device from int* to int; 4 is the byte size of an int type
      }
 
 /*

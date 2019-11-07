@@ -1,6 +1,14 @@
-tesla-attack: main.cu:150: int main(): Assertion `cudaSuccess == cudaMemcpy(timing,timing_d,sizeof(int),cudaMemcpyDeviceToHost)' failed.
-/var/spool/slurmd/job659858/slurm_script: line 8: 32102 Aborted                 (core dumped) ./tesla-attack
+It took me -1437991744 clicks before the funvtion call.
+original last_access value: 140688805723328
+start computing!
+It took me 2388 clicks, last_access value: 140688037511200.
+It took me 2167 clicks, last_access value: 140688037511200.
+It took me 2159 clicks, last_access value: 140688037511200.
+It took me 2158 clicks, last_access value: 140688037511200.
+It took me 4294769 clicks, last_access value: 140688037511200.
+It took me 859281 clicks, last_access value: 140688037511200.
+It took me 1024 clicks, last_access value: 140688037511264.
 
-real	0m1.335s
-user	0m0.012s
-sys	0m1.187s
+real	0m0.354s
+user	0m0.022s
+sys	0m0.152s

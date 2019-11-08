@@ -55,6 +55,52 @@ __global__ void static_sequence_read(int &latency, long long unsigned* device_ar
 	   last_access_value = j[0];
    }
 }
+__global__ void static_sequence_read_multism(int* latency, long long unsigned* device_array, int access_number, long long unsigned* last_access_value, int array_size){
+   //int threadID = (blockIdx.x * blockDim.x) + threadIdx.x;
+   int threadx =threadIdx.x;
+   int smid = blockIdx.x;
+   clock_t start, end;
+   long long unsigned temp_value;
+   long long unsigned *j;
+   if(threadx == 0){
+       for(int i=0;i<array_size;i++){
+          temp_value = device_array[i+array_size*smid];
+       }
+   }
+   last_access_value[smid]=temp_value;
+   j = &(device_array[array_size*smid]);
+   __syncthreads();//finish intializing the array
+   //start=0;
+   if(threadx == 0){start = clock();}//start clocking
+   for(int i=0;i<access_number;i++){if(threadx == 0) j=*(long long unsigned **)j;}//access the data array
+   if(threadx == 0){
+	   end = clock();
+	   latency[smid] = (int)(end - start);
+	   last_access_value[smid] = j[0];
+   }
+}
+
+/*
+__global__ void static_sequence_read_noinitialize(int* latency, long long unsigned* device_array, int access_number, long long unsigned* last_access_value, int array_size){
+   int threadID = (blockIdx.x * blockDim.x) + threadIdx.x;
+   long long unsigned *j;
+   
+   if(threadID == 0){
+       for(int i=0;i<array_size;i++){
+          last_access_value = device_array[i];
+       }
+   }
+   j = &device_array[0];
+   __syncthreads();//finish intializing the array
+   clock_t temp=0;
+   if(threadID == 0){temp = clock();}//start clocking
+   for(int i=0;i<access_number;i++){if(threadID == 0) j=*(long long unsigned **)j;}//access the data array
+   if(threadID == 0){
+	   latency = (int)(clock() - temp);
+	   last_access_value = j[0];
+   }
+}
+*/
 int main(void){/*
    for(int array_size = 64; array_size<2048;array_size+=8){
      int device_size = sizeof(int)*array_size;
@@ -109,18 +155,22 @@ int main(void){/*
      //cout << "cuda event elpased time:" << dt_ms << " ms\n";
 */
      for(long long unsigned array_size = 16; array_size < 16384; array_size += 4){
+     int sm_max = 20;
      //long long unsigned array_size = 16;
      printf("array size =%d\n",array_size);
-     long long unsigned device_size = sizeof(long long unsigned)*array_size;
+     long long unsigned device_size = sizeof(long long unsigned)*array_size*sm_max;
      long long unsigned* device_array;
-     long long unsigned* host_array = (long long unsigned*)malloc(array_size*sizeof(long long unsigned*));
+     long long unsigned* host_array = (long long unsigned*)malloc(array_size*sizeof(long long unsigned*)*sm_max);
      assert(cudaSuccess == cudaMalloc((void**)&device_array,device_size));
      int stride = 16;//set the access stride = cache_line_size / sizeof(long long unsigned) = 128/8=16
-     for(int i = 0; i < array_size; i++){
-         int t = i + stride;
-         if(t >= array_size) t %= stride;
-         host_array[i] = *((long long unsigned*)(&device_array)) + sizeof(long long unsigned)*t;//converse the device from int* to int; 4 is the byte size of an int type
+     for(int sm_id =0;sm_id<sm_max;sm_id++){
+         for(int i = 0; i < array_size; i++){
+             int t = i + stride;
+             if(t >= array_size) t %= stride;
+             host_array[i+array_size*sm_id] = (long long unsigned)(&(device_array[sm_id*array_size])) + sizeof(long long unsigned)*t;//converse the device from int* to int; 4 is the byte size of an int type
+         }
      }
+   
 
 /*
      cout<< "sizeof long long unsigned" << sizeof(long long unsigned) << endl;
@@ -132,31 +182,56 @@ int main(void){/*
 */
 
 
-     int* timing = (int*)malloc(sizeof(int));
+     int* timing = (int*)malloc(sizeof(int)*sm_max);
      int* timing_d;
      printf ("It took me %d clicks before the funvtion call.\n",timing[0]);
-     assert(cudaSuccess == cudaMalloc((void**)&timing_d, sizeof(int)));
-     long long unsigned* last_access_value = (long long unsigned*)malloc(sizeof(long long unsigned));
+     assert(cudaSuccess == cudaMalloc((void**)&timing_d, sizeof(int)*sm_max));
+     long long unsigned* last_access_value = (long long unsigned*)malloc(sizeof(long long unsigned)*sm_max);
      long long unsigned* d_last_access_value;
      printf ("original last_access value: %llu\n", last_access_value[0]);
-     assert(cudaSuccess == cudaMalloc((void**)&d_last_access_value, sizeof(long long unsigned)));
+     assert(cudaSuccess == cudaMalloc((void**)&d_last_access_value, sizeof(long long unsigned)*sm_max));
      printf("start computing!\n");
      assert(cudaSuccess == cudaMemcpy(device_array,host_array,device_size,cudaMemcpyHostToDevice));
-
-
-     //timing the cache access with different access number
-     static_sequence_read<<<1,1>>>(timing_d[0], device_array, 4, d_last_access_value[0], array_size);
-     assert(cudaSuccess == cudaMemcpy(timing,timing_d,sizeof(int),cudaMemcpyDeviceToHost));
-     assert(cudaSuccess == cudaMemcpy(last_access_value,d_last_access_value,sizeof(long long unsigned),cudaMemcpyDeviceToHost));
+     
      cudaDeviceSynchronize();
-     printf ("It took me %d clicks, last_access value: %llu.\n",timing[0], last_access_value[0]);
-
-     static_sequence_read<<<1,1>>>(timing_d[0], device_array, 8, d_last_access_value[0], array_size);
-     assert(cudaSuccess == cudaMemcpy(timing,timing_d,sizeof(int),cudaMemcpyDeviceToHost));
-     assert(cudaSuccess == cudaMemcpy(last_access_value,d_last_access_value,sizeof(long long unsigned),cudaMemcpyDeviceToHost));
+     static_sequence_read_multism<<<sm_max,1>>>(timing_d, device_array, 4, d_last_access_value, array_size);
      cudaDeviceSynchronize();
-     printf ("It took me %d clicks, last_access value: %llu.\n",timing[0], last_access_value[0]);
+     assert(cudaSuccess == cudaMemcpy(timing,timing_d,sizeof(int)*sm_max,cudaMemcpyDeviceToHost));
+     assert(cudaSuccess == cudaMemcpy(last_access_value,d_last_access_value,sizeof(long long unsigned)*sm_max,cudaMemcpyDeviceToHost));
+     cudaDeviceSynchronize();
+     double access_time=0;
+     for(int i=0;i<sm_max;i++){
+     //printf ("It took me %d clicks, last_access value: %llu.\n",timing[i], last_access_value[i]);
+         access_time+=timing[i];
+     }
+     printf("It took me %lf clicks",access_time/sm_max);
+    
 
+     cudaDeviceSynchronize();
+     static_sequence_read_multism<<<sm_max,1>>>(timing_d, device_array, 256, d_last_access_value, array_size);
+     cudaDeviceSynchronize();
+     assert(cudaSuccess == cudaMemcpy(timing,timing_d,sizeof(int)*sm_max,cudaMemcpyDeviceToHost));
+     assert(cudaSuccess == cudaMemcpy(last_access_value,d_last_access_value,sizeof(long long unsigned)*sm_max,cudaMemcpyDeviceToHost));
+     cudaDeviceSynchronize();
+     for(int i=0;i<sm_max;i++){
+     //printf ("It took me %d clicks, last_access value: %llu.\n",timing[i], last_access_value[i]);
+         access_time+=timing[i];
+     }
+     printf("It took me %lf clicks",access_time/sm_max);
+
+     cudaDeviceSynchronize();
+     static_sequence_read_multism<<<sm_max,1>>>(timing_d, device_array, 1024, d_last_access_value, array_size);
+     cudaDeviceSynchronize();
+     assert(cudaSuccess == cudaMemcpy(timing,timing_d,sizeof(int)*sm_max,cudaMemcpyDeviceToHost));
+     assert(cudaSuccess == cudaMemcpy(last_access_value,d_last_access_value,sizeof(long long unsigned)*sm_max,cudaMemcpyDeviceToHost));
+     cudaDeviceSynchronize();
+     for(int i=0;i<sm_max;i++){
+     //printf ("It took me %d clicks, last_access value: %llu.\n",timing[i], last_access_value[i]);
+         access_time+=timing[i];
+     }
+     printf("It took me %lf clicks",access_time/sm_max);
+     printf("\n");
+/*
      static_sequence_read<<<1,1>>>(timing_d[0], device_array, 32, d_last_access_value[0], array_size);
      assert(cudaSuccess == cudaMemcpy(timing,timing_d,sizeof(int),cudaMemcpyDeviceToHost));
      assert(cudaSuccess == cudaMemcpy(last_access_value,d_last_access_value,sizeof(long long unsigned),cudaMemcpyDeviceToHost));
@@ -168,15 +243,36 @@ int main(void){/*
      assert(cudaSuccess == cudaMemcpy(last_access_value,d_last_access_value,sizeof(long long unsigned),cudaMemcpyDeviceToHost));
      cudaDeviceSynchronize();
      printf ("It took me %d clicks, last_access value: %llu.\n",timing[0], last_access_value[0], array_size);
-
-     static_sequence_read<<<1,1>>>(timing_d[0], device_array, 1024, d_last_access_value[0], array_size);
+*/
+    /* static_sequence_read_noinitialize<<<1,1>>>(timing_d[0], device_array, 4096, d_last_access_value[0], array_size);
+     assert(cudaSuccess == cudaMemcpy(timing,timing_d,sizeof(int),cudaMemcpyDeviceToHost));
+     assert(cudaSuccess == cudaMemcpy(last_access_value,d_last_access_value,sizeof(long long unsigned),cudaMemcpyDeviceToHost));
+     cudaDeviceSynchronize();
+     printf ("no initiliaze took %d clicks, last_access value: %llu.\n",timing[0], last_access_value[0]);
+*/
+     /*
+     static_sequence_read<<<1,1>>>(timing_d[0], device_array, 4096, d_last_access_value[0], array_size);
      assert(cudaSuccess == cudaMemcpy(timing,timing_d,sizeof(int),cudaMemcpyDeviceToHost));
      assert(cudaSuccess == cudaMemcpy(last_access_value,d_last_access_value,sizeof(long long unsigned),cudaMemcpyDeviceToHost));
      cudaDeviceSynchronize();
      printf ("It took me %d clicks, last_access value: %llu.\n",timing[0], last_access_value[0]);
-
+  */
+     /*   
+     static_sequence_read_noinitialize<<<1,1>>>(timing_d[0], device_array, 4096, d_last_access_value[0], array_size);
+     assert(cudaSuccess == cudaMemcpy(timing,timing_d,sizeof(int),cudaMemcpyDeviceToHost));
+     assert(cudaSuccess == cudaMemcpy(last_access_value,d_last_access_value,sizeof(long long unsigned),cudaMemcpyDeviceToHost));
+     cudaDeviceSynchronize();
+     printf ("no initiliaze took %d clicks, last_access value: %llu.\n",timing[0], last_access_value[0]);
+*/
+     /*
+     static_sequence_read<<<1,1>>>(timing_d[0], device_array, 4096, d_last_access_value[0], array_size);
+     assert(cudaSuccess == cudaMemcpy(timing,timing_d,sizeof(int),cudaMemcpyDeviceToHost));
+     assert(cudaSuccess == cudaMemcpy(last_access_value,d_last_access_value,sizeof(long long unsigned),cudaMemcpyDeviceToHost));
+     cudaDeviceSynchronize();
+     printf ("It took me %d clicks, last_access value: %llu.\n",timing[0], last_access_value[0]);
      delete host_array;
      printf ("\n");
+     */
      }
    return 0;
 } 

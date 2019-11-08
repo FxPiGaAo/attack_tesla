@@ -21,8 +21,10 @@ __global__ void test_clock(int &delay, int &add){
          }
       }
    }
-   if(threadID==0){clock_t end = clock();
-   delay = (int)(end - start);}
+   if(threadID==0){
+       clock_t end = clock();
+       delay = (int)(end - start);
+   }
 }
 
 
@@ -154,7 +156,7 @@ int main(void){/*
      //cudaEventElapsedTime(&dt_ms, event1, event2);
      //cout << "cuda event elpased time:" << dt_ms << " ms\n";
 */
-     for(long long unsigned array_size = 16; array_size < 16384; array_size += 4){
+     for(long long unsigned array_size = 1024; array_size < 16384; array_size += 4){
      int sm_max = 20;
      //long long unsigned array_size = 16;
      printf("array size =%d\n",array_size);
@@ -207,24 +209,30 @@ int main(void){/*
      printf("It took me %lf clicks",access_time/sm_max);
     
 
+
+
      cudaDeviceSynchronize();
-     static_sequence_read_multism<<<sm_max,1>>>(timing_d, device_array, 256, d_last_access_value, array_size);
+     static_sequence_read_multism<<<sm_max,1>>>(timing_d, device_array, 16384, d_last_access_value, array_size);
      cudaDeviceSynchronize();
      assert(cudaSuccess == cudaMemcpy(timing,timing_d,sizeof(int)*sm_max,cudaMemcpyDeviceToHost));
      assert(cudaSuccess == cudaMemcpy(last_access_value,d_last_access_value,sizeof(long long unsigned)*sm_max,cudaMemcpyDeviceToHost));
      cudaDeviceSynchronize();
+     access_time = 0;
      for(int i=0;i<sm_max;i++){
      //printf ("It took me %d clicks, last_access value: %llu.\n",timing[i], last_access_value[i]);
          access_time+=timing[i];
      }
      printf("It took me %lf clicks",access_time/sm_max);
 
+
+
      cudaDeviceSynchronize();
-     static_sequence_read_multism<<<sm_max,1>>>(timing_d, device_array, 1024, d_last_access_value, array_size);
+     static_sequence_read_multism<<<sm_max,1>>>(timing_d, device_array, 1, d_last_access_value, array_size);
      cudaDeviceSynchronize();
      assert(cudaSuccess == cudaMemcpy(timing,timing_d,sizeof(int)*sm_max,cudaMemcpyDeviceToHost));
      assert(cudaSuccess == cudaMemcpy(last_access_value,d_last_access_value,sizeof(long long unsigned)*sm_max,cudaMemcpyDeviceToHost));
      cudaDeviceSynchronize();
+     access_time = 0;
      for(int i=0;i<sm_max;i++){
      //printf ("It took me %d clicks, last_access value: %llu.\n",timing[i], last_access_value[i]);
          access_time+=timing[i];

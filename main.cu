@@ -155,8 +155,11 @@ int main(void){/*
      //float dt_ms;
      //cudaEventElapsedTime(&dt_ms, event1, event2);
      //cout << "cuda event elpased time:" << dt_ms << " ms\n";
-*/
-     for(long long unsigned array_size = 1024; array_size < 16384; array_size += 4){
+*/   
+     
+
+     //assert(cudaSuccess == cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
+     for(long long unsigned array_size = 1024; array_size < 8196; array_size += 1){
      int sm_max = 20;
      //long long unsigned array_size = 16;
      //printf("array size =%d\n",array_size);
@@ -227,7 +230,11 @@ double access_time;
      }
     // printf("It took me %lf clicks",access_time/sm_max);
      printf("%lf\n",access_time/sm_max);
+      
 
+     delete host_array;
+     delete timing;
+     delete last_access_value;
 
 
      /*

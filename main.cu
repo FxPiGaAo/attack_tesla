@@ -158,7 +158,7 @@ int main(void){/*
 */   
      
 
-     //assert(cudaSuccess == cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
+     assert(cudaSuccess == cudaDeviceSetCacheConfig(cudaFuncCachePreferShared));
      for(long long unsigned array_size = 1024; array_size < 8196; array_size += 1){
      int sm_max = 20;
      //long long unsigned array_size = 16;
